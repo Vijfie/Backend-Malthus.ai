@@ -1,0 +1,1003 @@
+import React, { useState } from 'react';
+import { 
+  TrendingUp, AlertCircle, Clock, CheckCircle, BarChart3, Target, Shield, Zap,
+  Activity, DollarSign, PieChart, Calendar, Download, Copy,
+  ChevronDown, ChevronUp, LineChart, AlertTriangle
+} from 'lucide-react';
+
+const App = () => {
+  const [input, setInput] = useState('');
+  const [analysis, setAnalysis] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const analyzeStock = async () => {
+    if (!input.trim()) return;
+
+    setLoading(true);
+    setError('');
+    setAnalysis(null);
+
+    try {
+      const response = await fetch('http://localhost:3001/api/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ symbol: input.trim().toUpperCase() }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Er is iets misgegaan');
+      }
+
+      const data = await response.json();
+      setAnalysis(data);
+      setInput('');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      analyzeStock();
+    }
+  };
+
+  const Badge = ({ children, variant = 'default', size = 'sm' }) => {
+    const variants = {
+      default: 'bg-gray-100 text-gray-800',
+      success: 'bg-green-100 text-green-800',
+      warning: 'bg-yellow-100 text-yellow-800',
+      danger: 'bg-red-100 text-red-800',
+      info: 'bg-blue-100 text-blue-800'
+    };
+    
+    const sizes = {
+      sm: 'px-2 py-1 text-xs',
+      md: 'px-3 py-1 text-sm',
+      lg: 'px-4 py-2 text-base'
+    };
+
+    return (
+      <span className={`inline-flex items-center rounded-full font-medium ${variants[variant]} ${sizes[size]}`}>
+        {children}
+      </span>
+    );
+  };
+
+  const MetricCard = ({ title, value, subtitle, trend, icon: Icon }) => (
+    <div className="bg-white rounded-xl p-4 shadow-sm border">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Icon className="w-4 h-4 text-gray-600" />
+          <span className="text-sm font-medium text-gray-600">{title}</span>
+        </div>
+        {trend && (
+          <Badge variant={trend.type}>
+            {trend.value}
+          </Badge>
+        )}
+      </div>
+      <div className="text-2xl font-bold text-gray-900 mb-1">{value}</div>
+      {subtitle && <div className="text-sm text-gray-500">{subtitle}</div>}
+    </div>
+  );
+
+  const ProgressBar = ({ value, max, label, color = 'blue' }) => {
+    const percentage = (value / max) * 100;
+    const colorClasses = {
+      blue: 'bg-blue-500',
+      green: 'bg-green-500',
+      red: 'bg-red-500',
+      yellow: 'bg-yellow-500'
+    };
+
+    return (
+      <div className="w-full">
+        <div className="flex justify-between text-sm mb-1">
+          <span>{label}</span>
+          <span>{percentage.toFixed(1)}%</span>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-2">
+          <div 
+            className={`h-2 rounded-full ${colorClasses[color]}`}
+            style={{ width: `${Math.min(percentage, 100)}%` }}
+          ></div>
+        </div>
+      </div>
+    );
+  };
+
+  const CollapsibleSection = ({ title, icon: Icon, children, defaultOpen = false }) => {
+    const [isOpen, setIsOpen] = useState(defaultOpen);
+    
+    return (
+      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <Icon className="w-5 h-5 text-blue-600" />
+            <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+          </div>
+          {isOpen ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+        </button>
+        {isOpen && (
+          <div className="px-6 pb-6">
+            {children}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const TradingViewChart = ({ symbol, data }) => {
+    const [selectedTimeframe, setSelectedTimeframe] = useState('1D');
+    const [indicators, setIndicators] = useState({
+      ma50: true,
+      ma200: true,
+      volume: true
+    });
+
+    const generateRealisticChartData = () => {
+      const basePrice = data?.currentPrice || 240;
+      const dataPoints = 120;
+      const chartData = [];
+      
+      // Generate more realistic price movement
+      let currentPrice = basePrice * 0.85; // Start lower for upward trend
+      const volatility = basePrice * 0.02; // 2% volatility
+      
+      for (let i = 0; i < dataPoints; i++) {
+        // Create trend and random walk
+        const trend = (i / dataPoints) * (basePrice - currentPrice) / 10;
+        const randomWalk = (Math.random() - 0.5) * volatility;
+        const momentum = Math.sin(i / 10) * volatility * 0.3;
+        
+        currentPrice = Math.max(1, currentPrice + trend + randomWalk + momentum);
+        
+        chartData.push({
+          x: i,
+          price: currentPrice,
+          volume: Math.random() * 80 + 20 // Volume between 20-100
+        });
+      }
+      
+      return chartData;
+    };
+
+    const calculateMovingAverage = (data, period) => {
+      return data.map((point, index) => {
+        if (index < period - 1) return { ...point, ma: null };
+        
+        const sum = data.slice(index - period + 1, index + 1)
+          .reduce((acc, curr) => acc + curr.price, 0);
+        
+        return { ...point, ma: sum / period };
+      });
+    };
+
+    const chartData = generateRealisticChartData();
+    const dataWithMA50 = calculateMovingAverage(chartData, 20); // Shorter period for demo
+    const dataWithMA200 = calculateMovingAverage(dataWithMA50, 40);
+
+    const minPrice = Math.min(...chartData.map(d => d.price));
+    const maxPrice = Math.max(...chartData.map(d => d.price));
+    const priceRange = maxPrice - minPrice;
+    const padding = priceRange * 0.1;
+
+    const normalizeY = (price) => {
+      return 85 - ((price - minPrice + padding) / (priceRange + 2 * padding)) * 70;
+    };
+
+    const normalizeX = (index) => {
+      return (index / (chartData.length - 1)) * 90 + 5;
+    };
+
+    // Create price path
+    const pricePath = chartData
+      .map((point, i) => `${i === 0 ? 'M' : 'L'} ${normalizeX(i)} ${normalizeY(point.price)}`)
+      .join(' ');
+
+    // Create MA paths
+    const ma50Path = dataWithMA200
+      .filter(d => d.ma !== null)
+      .map((point, i, arr) => `${i === 0 ? 'M' : 'L'} ${normalizeX(point.x)} ${normalizeY(point.ma)}`)
+      .join(' ');
+
+    // Create area fill for price
+    const areaPath = pricePath + ` L ${normalizeX(chartData.length - 1)} 85 L ${normalizeX(0)} 85 Z`;
+
+    const timeframes = [
+      { value: '1D', label: '1D' },
+      { value: '5D', label: '5D' },
+      { value: '1M', label: '1M' },
+      { value: '6M', label: '6M' },
+      { value: '1Y', label: '1Y' },
+      { value: '5Y', label: '5Y' }
+    ];
+
+    const toggleIndicator = (indicator) => {
+      setIndicators(prev => ({
+        ...prev,
+        [indicator]: !prev[indicator]
+      }));
+    };
+
+    // Generate grid lines
+    const horizontalLines = [];
+    for (let i = 0; i <= 5; i++) {
+      const y = 15 + (i * 14);
+      horizontalLines.push(
+        <line key={`h-${i}`} x1="5" y1={y} x2="95" y2={y} stroke="#f1f5f9" strokeWidth="0.2" />
+      );
+    }
+
+    const verticalLines = [];
+    for (let i = 0; i <= 6; i++) {
+      const x = 5 + (i * 15);
+      verticalLines.push(
+        <line key={`v-${i}`} x1={x} y1="15" x2={x} y2="85" stroke="#f1f5f9" strokeWidth="0.2" />
+      );
+    }
+
+    return (
+      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+        <div className="px-6 py-4 border-b bg-gradient-to-r from-gray-50 to-blue-50">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <LineChart className="w-5 h-5 text-blue-600" />
+              {symbol} Price Chart
+            </h3>
+            <div className="text-sm text-gray-500 flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              Live market data
+            </div>
+          </div>
+          
+          <div className="flex items-center justify-between">
+            <div className="flex gap-1 bg-white rounded-lg p-1 border shadow-sm">
+              {timeframes.map(tf => (
+                <button
+                  key={tf.value}
+                  onClick={() => setSelectedTimeframe(tf.value)}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${
+                    selectedTimeframe === tf.value
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                  }`}
+                >
+                  {tf.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium text-gray-700">Indicators:</span>
+              <button
+                onClick={() => toggleIndicator('ma50')}
+                className={`text-xs px-3 py-1.5 rounded-full font-medium transition-all duration-200 ${
+                  indicators.ma50
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                MA50
+              </button>
+              <button
+                onClick={() => toggleIndicator('ma200')}
+                className={`text-xs px-3 py-1.5 rounded-full font-medium transition-all duration-200 ${
+                  indicators.ma200
+                    ? 'bg-orange-600 text-white shadow-sm'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                MA200
+              </button>
+              <button
+                onClick={() => toggleIndicator('volume')}
+                className={`text-xs px-3 py-1.5 rounded-full font-medium transition-all duration-200 ${
+                  indicators.volume
+                    ? 'bg-green-600 text-white shadow-sm'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                Volume
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-6 bg-gradient-to-br from-gray-50/30 to-blue-50/30">
+          <div className="w-full h-96 bg-white rounded-lg border-2 border-gray-100 overflow-hidden relative shadow-inner">
+            <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+              {/* Background gradient */}
+              <defs>
+                <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.1" />
+                  <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.01" />
+                </linearGradient>
+                <linearGradient id="priceGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
+                  <stop offset="100%" stopColor="#10b981" stopOpacity="0.05" />
+                </linearGradient>
+                <filter id="glow">
+                  <feGaussianBlur stdDeviation="0.5" result="coloredBlur"/>
+                  <feMerge> 
+                    <feMergeNode in="coloredBlur"/>
+                    <feMergeNode in="SourceGraphic"/>
+                  </feMerge>
+                </filter>
+              </defs>
+              
+              {/* Background */}
+              <rect width="100%" height="100%" fill="url(#chartGradient)" />
+              
+              {/* Grid */}
+              <g opacity="0.6">
+                {horizontalLines}
+                {verticalLines}
+              </g>
+              
+              {/* Chart area background */}
+              <rect x="5" y="15" width="90" height="70" fill="rgba(255,255,255,0.7)" stroke="none" />
+              
+              {/* Price area fill */}
+              <path
+                d={areaPath}
+                fill="url(#priceGradient)"
+                stroke="none"
+              />
+              
+              {/* Support/Resistance zones */}
+              <rect
+                x="5"
+                y="70"
+                width="90"
+                height="4"
+                fill="#ef4444"
+                opacity="0.1"
+              />
+              <rect
+                x="5"
+                y="25"
+                width="90"
+                height="4"
+                fill="#22c55e"
+                opacity="0.1"
+              />
+              
+              {/* MA200 Line */}
+              {indicators.ma200 && ma50Path && (
+                <path
+                  d={ma50Path}
+                  fill="none"
+                  stroke="#f59e0b"
+                  strokeWidth="0.3"
+                  strokeDasharray="1,1"
+                  opacity="0.8"
+                />
+              )}
+              
+              {/* MA50 Line */}
+              {indicators.ma50 && ma50Path && (
+                <path
+                  d={ma50Path}
+                  fill="none"
+                  stroke="#3b82f6"
+                  strokeWidth="0.4"
+                  strokeDasharray="2,1"
+                  opacity="0.9"
+                />
+              )}
+              
+              {/* Main price line */}
+              <path
+                d={pricePath}
+                fill="none"
+                stroke="#10b981"
+                strokeWidth="0.6"
+                filter="url(#glow)"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              
+              {/* Support line */}
+              <line
+                x1="5"
+                y1="72"
+                x2="95"
+                y2="72"
+                stroke="#ef4444"
+                strokeWidth="0.4"
+                strokeDasharray="3,2"
+                opacity="0.7"
+              />
+              
+              {/* Resistance line */}
+              <line
+                x1="5"
+                y1="27"
+                x2="95"
+                y2="27"
+                stroke="#22c55e"
+                strokeWidth="0.4"
+                strokeDasharray="3,2"
+                opacity="0.7"
+              />
+              
+              {/* Price points (last few) */}
+              {chartData.slice(-5).map((point, index) => (
+                <circle
+                  key={index}
+                  cx={normalizeX(point.x)}
+                  cy={normalizeY(point.price)}
+                  r="0.3"
+                  fill="#10b981"
+                  opacity="0.8"
+                />
+              ))}
+              
+              {/* Current price indicator */}
+              <circle
+                cx={normalizeX(chartData.length - 1)}
+                cy={normalizeY(chartData[chartData.length - 1].price)}
+                r="0.8"
+                fill="#10b981"
+                stroke="#ffffff"
+                strokeWidth="0.3"
+                className="animate-pulse"
+              />
+            </svg>
+            
+            {/* Price overlay */}
+            <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-sm rounded-lg px-3 py-2 shadow-sm border">
+              <div className="text-lg font-bold text-gray-900">${data?.currentPrice?.toFixed(2) || '239.69'}</div>
+              <div className="text-xs text-gray-500 flex items-center gap-1">
+                <div className="w-1 h-1 bg-green-500 rounded-full"></div>
+                {selectedTimeframe} • Live
+              </div>
+            </div>
+            
+            {/* Volume bars */}
+            {indicators.volume && (
+              <div className="absolute bottom-1 left-2 right-2 h-12 flex items-end gap-px">
+                {chartData.slice(-30).map((point, index) => (
+                  <div
+                    key={index}
+                    className="flex-1 bg-gradient-to-t from-blue-500/40 to-blue-300/20 rounded-sm"
+                    style={{ height: `${(point.volume / 100) * 100}%` }}
+                  />
+                ))}
+              </div>
+            )}
+            
+            {/* Time labels */}
+            <div className="absolute bottom-2 left-3 right-3 flex justify-between text-xs text-gray-400">
+              <span>9:30</span>
+              <span>12:00</span>
+              <span>15:30</span>
+              <span>16:00</span>
+            </div>
+            
+            {/* Price labels */}
+            <div className="absolute top-4 right-2 text-xs text-gray-400 space-y-3">
+              <div>${(data?.currentPrice * 1.05 || 251.68).toFixed(0)}</div>
+              <div>${(data?.currentPrice || 239.69).toFixed(0)}</div>
+              <div>${(data?.currentPrice * 0.95 || 227.71).toFixed(0)}</div>
+            </div>
+          </div>
+          
+          {/* Enhanced Legend */}
+          <div className="mt-4 flex items-center justify-between">
+            <div className="flex items-center gap-6 text-sm">
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-1 bg-gradient-to-r from-green-500 to-green-400 rounded"></div>
+                <span className="text-gray-700 font-medium">Price</span>
+              </div>
+              {indicators.ma50 && (
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-0.5 bg-blue-500 rounded"></div>
+                  <span className="text-gray-600">MA50</span>
+                </div>
+              )}
+              {indicators.ma200 && (
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-0.5 bg-orange-500 rounded"></div>
+                  <span className="text-gray-600">MA200</span>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-0.5 bg-green-500 opacity-70 rounded"></div>
+                <span className="text-gray-600">Support: ${data?.supportLevel || '221.40'}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-0.5 bg-red-500 opacity-70 rounded"></div>
+                <span className="text-gray-600">Resistance: ${data?.resistanceLevel || '259.18'}</span>
+              </div>
+            </div>
+            
+            <div className="text-xs text-gray-500 flex items-center gap-2">
+              <Calendar className="w-3 h-3" />
+              Updated: {new Date().toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const parseAnalysisData = () => {
+    return {
+      executiveSummary: {
+        price: 239.69,
+        rating: { text: 'HOLD', variant: 'warning' },
+        riskLevel: { text: 'Medium-High Risk', variant: 'warning' },
+        marketCap: '3.56T',
+        beta: 1.11
+      },
+      technicalData: {
+        trend50MA: { status: 'Above', price: 218.41, variant: 'success' },
+        trend200MA: { status: 'Above', price: 221.40, variant: 'success' },
+        momentum: { text: 'Slight Negative', variant: 'warning' },
+        range52Week: { current: 239.69, low: 168.80, high: 259.18 }
+      },
+      fundamentals: {
+        pe: { value: 36.37, assessment: 'High', variant: 'warning' },
+        pb: { value: 54.03, assessment: 'Extremely High', variant: 'danger' },
+        roe: { value: 1.5, assessment: 'Weak', variant: 'danger' },
+        profitMargin: { value: 24.3, assessment: 'High', variant: 'success' }
+      },
+      priceTargets: {
+        conservative: 144.98,
+        fair: 184.52,
+        optimistic: 230.65
+      },
+      newsHeadlines: [
+        "ASG: Discount Presents A Better Opportunity",
+        "The BLSH Strategy: The Compounding Machine",
+        "Top 50 High-Quality Dividend Stocks For September 2025"
+      ]
+    };
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white shadow-sm border-b">
+        <div className="max-w-6xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-green-500 rounded-lg flex items-center justify-center">
+                <TrendingUp className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-green-500 bg-clip-text text-transparent">
+                  TradingAI
+                </h1>
+                <p className="text-sm text-gray-500">Slimmere Trading Gedreven door AI</p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button className="px-4 py-2 text-blue-600 border border-blue-600 rounded-full hover:bg-blue-50 transition-colors">
+                Inloggen
+              </button>
+              <button className="px-4 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors">
+                Start Gratis
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-6xl mx-auto px-6 py-12">
+        <div className="text-center mb-12">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-green-500 bg-clip-text text-transparent mb-4">
+            AI Analyse Tool
+          </h1>
+          <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
+            Krijg professionele aandelenanalyses binnen seconden. 
+            Powered by real-time data en geavanceerde AI.
+          </p>
+
+          <div className="max-w-md mx-auto">
+            <div className="bg-white rounded-2xl shadow-lg p-6">
+              <label className="block text-sm font-medium text-gray-700 mb-3 text-left">
+                Voer aandelensymbool in
+              </label>
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder="bijv. AAPL"
+                  disabled={loading}
+                  className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-lg font-mono uppercase"
+                />
+                <button
+                  onClick={analyzeStock}
+                  disabled={loading || !input.trim()}
+                  className="px-6 py-3 bg-gradient-to-r from-blue-600 to-green-500 text-white rounded-xl hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium transition-all"
+                >
+                  {loading ? (
+                    <>
+                      <Clock className="w-5 h-5 animate-spin" />
+                      Analyseren...
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-5 h-5" />
+                      Analyseer
+                    </>
+                  )}
+                </button>
+              </div>
+              {error && (
+                <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-red-700 text-sm">{error}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {analysis && (
+          <div className="space-y-8">
+            <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+              <div className="bg-gradient-to-r from-blue-600 to-green-500 px-8 py-6 text-white">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold">{analysis.company}</h2>
+                    <p className="text-blue-100">
+                      {analysis.symbol} • {analysis.sector}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-3xl font-bold">${analysis.currentPrice?.toFixed(2)}</div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <CheckCircle className="w-5 h-5 text-green-300" />
+                      <span className="text-sm">Live Data</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="px-8 py-4 bg-gray-50 border-b flex gap-3">
+                <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                  <Download className="w-4 h-4" />
+                  Download PDF
+                </button>
+                <button className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                  <Copy className="w-4 h-4" />
+                  Copy Summary
+                </button>
+              </div>
+            </div>
+
+            {(() => {
+              const data = parseAnalysisData();
+              return (
+                <>
+                  <div className="bg-white rounded-xl shadow-sm border p-6">
+                    <h3 className="text-xl font-bold text-gray-900 mb-6">Executive Summary</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                      <MetricCard
+                        title="Rating"
+                        value={data.executiveSummary.rating.text}
+                        icon={Target}
+                        trend={{ value: data.executiveSummary.rating.text, type: data.executiveSummary.rating.variant }}
+                      />
+                      <MetricCard
+                        title="Risk Level"
+                        value={data.executiveSummary.riskLevel.text}
+                        icon={AlertTriangle}
+                        trend={{ value: "Medium-High", type: data.executiveSummary.riskLevel.variant }}
+                      />
+                      <MetricCard
+                        title="Market Cap"
+                        value={`$${data.executiveSummary.marketCap}`}
+                        icon={PieChart}
+                      />
+                      <MetricCard
+                        title="Beta"
+                        value={data.executiveSummary.beta}
+                        subtitle="Market-like volatility"
+                        icon={Activity}
+                      />
+                      <MetricCard
+                        title="Current Price"
+                        value={`$${data.executiveSummary.price}`}
+                        subtitle="Real-time"
+                        icon={DollarSign}
+                      />
+                    </div>
+                  </div>
+
+                  <TradingViewChart 
+                    symbol={analysis.symbol} 
+                    data={{
+                      currentPrice: analysis.currentPrice,
+                      supportLevel: data.technicalData.range52Week.low,
+                      resistanceLevel: data.technicalData.range52Week.high
+                    }}
+                  />
+
+                  <CollapsibleSection title="Technische Analyse" icon={LineChart} defaultOpen>
+                    <div className="grid md:grid-cols-2 gap-6">
+                      <div className="space-y-4">
+                        <h4 className="font-semibold text-gray-900">Trend Analysis</h4>
+                        <div className="space-y-3">
+                          <div className="flex justify-between items-center">
+                            <span>vs 50-day MA</span>
+                            <Badge variant={data.technicalData.trend50MA.variant}>
+                              {data.technicalData.trend50MA.status} (${data.technicalData.trend50MA.price})
+                            </Badge>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span>vs 200-day MA</span>
+                            <Badge variant={data.technicalData.trend200MA.variant}>
+                              {data.technicalData.trend200MA.status} (${data.technicalData.trend200MA.price})
+                            </Badge>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span>Momentum</span>
+                            <Badge variant={data.technicalData.momentum.variant}>
+                              {data.technicalData.momentum.text}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-4">
+                        <h4 className="font-semibold text-gray-900">52-Week Range</h4>
+                        <ProgressBar
+                          value={data.technicalData.range52Week.current - data.technicalData.range52Week.low}
+                          max={data.technicalData.range52Week.high - data.technicalData.range52Week.low}
+                          label={`$${data.technicalData.range52Week.low} - $${data.technicalData.range52Week.high}`}
+                          color="blue"
+                        />
+                        <div className="text-sm text-gray-600">
+                          Current: ${data.technicalData.range52Week.current} (78% of range)
+                        </div>
+                      </div>
+                    </div>
+                  </CollapsibleSection>
+
+                  <CollapsibleSection title="Fundamentele Analyse" icon={BarChart3}>
+                    <div className="grid md:grid-cols-4 gap-4">
+                      <MetricCard
+                        title="P/E Ratio"
+                        value={data.fundamentals.pe.value}
+                        subtitle={data.fundamentals.pe.assessment}
+                        icon={TrendingUp}
+                        trend={{ value: data.fundamentals.pe.assessment, type: data.fundamentals.pe.variant }}
+                      />
+                      <MetricCard
+                        title="P/B Ratio"
+                        value={data.fundamentals.pb.value}
+                        subtitle={data.fundamentals.pb.assessment}
+                        icon={TrendingUp}
+                        trend={{ value: data.fundamentals.pb.assessment, type: data.fundamentals.pb.variant }}
+                      />
+                      <MetricCard
+                        title="ROE"
+                        value={`${data.fundamentals.roe.value}%`}
+                        subtitle={data.fundamentals.roe.assessment}
+                        icon={Target}
+                        trend={{ value: data.fundamentals.roe.assessment, type: data.fundamentals.roe.variant }}
+                      />
+                      <MetricCard
+                        title="Profit Margin"
+                        value={`${data.fundamentals.profitMargin.value}%`}
+                        subtitle={data.fundamentals.profitMargin.assessment}
+                        icon={DollarSign}
+                        trend={{ value: data.fundamentals.profitMargin.assessment, type: data.fundamentals.profitMargin.variant }}
+                      />
+                    </div>
+                  </CollapsibleSection>
+
+                  <CollapsibleSection title="Nieuws & Sentiment" icon={Activity}>
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-4">
+                        <Badge variant="success" size="md">Positive Sentiment</Badge>
+                        <span className="text-sm text-gray-600">8 articles analyzed</span>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-4 max-h-48 overflow-y-auto">
+                        {data.newsHeadlines.map((headline, index) => (
+                          <div key={index} className="py-2 border-b border-gray-200 last:border-b-0">
+                            <p className="text-sm text-gray-700">{headline}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </CollapsibleSection>
+
+                  <CollapsibleSection title="Investment Recommendation" icon={Target}>
+                    <div className="space-y-6">
+                      <div className="grid md:grid-cols-3 gap-4">
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                          <h4 className="font-semibold text-red-800 mb-2">Conservative</h4>
+                          <div className="text-2xl font-bold text-red-900">${data.priceTargets.conservative}</div>
+                          <div className="text-sm text-red-600">-39.5% potential</div>
+                        </div>
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                          <h4 className="font-semibold text-yellow-800 mb-2">Fair Value</h4>
+                          <div className="text-2xl font-bold text-yellow-900">${data.priceTargets.fair}</div>
+                          <div className="text-sm text-yellow-600">-23.0% potential</div>
+                        </div>
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                          <h4 className="font-semibold text-green-800 mb-2">Optimistic</h4>
+                          <div className="text-2xl font-bold text-green-900">${data.priceTargets.optimistic}</div>
+                          <div className="text-sm text-green-600">-3.8% potential</div>
+                        </div>
+                      </div>
+                    </div>
+                  </CollapsibleSection>
+
+                  <div className="bg-gray-100 border border-gray-200 rounded-xl p-6">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="w-5 h-5 text-gray-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="font-semibold text-gray-900 mb-2">Disclaimer</h4>
+                        <p className="text-sm text-gray-700 leading-relaxed">
+                          Deze analyse is uitsluitend voor informatieve doeleinden en mag niet worden beschouwd als financieel advies. 
+                          Prestaties uit het verleden bieden geen garantie voor toekomstige resultaten. Raadpleeg altijd een gekwalificeerde 
+                          financiële adviseur voordat u investeringsbeslissingen neemt.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-center text-sm text-gray-500">
+                    <Calendar className="w-4 h-4 inline mr-2" />
+                    Analyse gegenereerd op: {new Date(analysis.timestamp).toLocaleString('nl-NL')}
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        )}
+
+        {!analysis && !loading && (
+          <div className="max-w-4xl mx-auto">
+            <div className="bg-white rounded-2xl shadow-lg p-8">
+              <div className="text-center mb-8">
+                <div className="w-16 h-16 bg-gradient-to-r from-blue-600 to-green-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <BarChart3 className="w-8 h-8 text-white" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-800 mb-3">
+                  Professional Stock Analysis Engine
+                </h3>
+                <p className="text-gray-600 text-lg">
+                  Krijg institutionele-level analyses met real-time data, technische indicators, 
+                  sentiment analysis en evidence-based aanbevelingen.
+                </p>
+              </div>
+
+              <div className="grid md:grid-cols-3 gap-6">
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-6">
+                  <div className="w-12 h-12 bg-blue-500 rounded-xl flex items-center justify-center mb-4">
+                    <TrendingUp className="w-6 h-6 text-white" />
+                  </div>
+                  <h4 className="font-bold text-blue-800 mb-3">Technische Analyse</h4>
+                  <ul className="text-blue-700 space-y-2 text-sm">
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
+                      Trend identificatie
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
+                      Support/Resistance levels
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
+                      52-week positionering
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
+                      Moving averages
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-6">
+                  <div className="w-12 h-12 bg-green-500 rounded-xl flex items-center justify-center mb-4">
+                    <Target className="w-6 h-6 text-white" />
+                  </div>
+                  <h4 className="font-bold text-green-800 mb-3">Fundamentele Data</h4>
+                  <ul className="text-green-700 space-y-2 text-sm">
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+                      P/E & P/B ratio analyse
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+                      ROE & profitability
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+                      Sector vergelijking
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+                      Financial strength
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-6">
+                  <div className="w-12 h-12 bg-purple-500 rounded-xl flex items-center justify-center mb-4">
+                    <Shield className="w-6 h-6 text-white" />
+                  </div>
+                  <h4 className="font-bold text-purple-800 mb-3">AI Insights</h4>
+                  <ul className="text-purple-700 space-y-2 text-sm">
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 bg-purple-500 rounded-full"></div>
+                      Bull/Bear scenarios
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 bg-purple-500 rounded-full"></div>
+                      Price targets
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 bg-purple-500 rounded-full"></div>
+                      News sentiment
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 bg-purple-500 rounded-full"></div>
+                      Risk assessment
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="mt-8 bg-gray-50 rounded-2xl p-6 text-center">
+                <p className="text-gray-600 mb-4">
+                  <strong>Populaire symbolen om te testen:</strong>
+                </p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA', 'META', 'NFLX'].map(symbol => (
+                    <button
+                      key={symbol}
+                      onClick={() => setInput(symbol)}
+                      className="px-3 py-1 bg-white border border-gray-200 rounded-lg text-sm font-mono hover:border-blue-500 hover:text-blue-600 transition-colors"
+                    >
+                      {symbol}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <footer className="bg-white border-t mt-20">
+        <div className="max-w-6xl mx-auto px-6 py-8">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-green-500 rounded-lg flex items-center justify-center">
+                <TrendingUp className="w-5 h-5 text-white" />
+              </div>
+              <span className="font-bold bg-gradient-to-r from-blue-600 to-green-500 bg-clip-text text-transparent">
+                TradingAI
+              </span>
+            </div>
+            <p className="text-gray-500 text-sm">
+              © 2025 TradingAI. Professional AI-powered stock analysis.
+            </p>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+};
+
+export default App;

@@ -1306,3 +1306,14 @@ app.get('/api/test/:symbol', async (req, res) => {
 });
 
 module.exports = app;
+
+// ⬇️ start de server alleen wanneer dit bestand rechtstreeks wordt uitgevoerd
+if (require.main === module) {
+  const PORT = process.env.PORT || 3001;
+  app.listen(PORT, () => {
+    console.log(`Backend listening on http://localhost:${PORT}`);
+  });
+}
+
+// export voor eventuele serverless/ tests blijft werken:
+module.exports = app;
